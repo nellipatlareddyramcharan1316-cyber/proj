@@ -3,12 +3,13 @@ pipeline {
 
     environment {
         K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+        POD_NAME          = 'prime-even-pod'
     }
 
     stages {
         stage('Create Pod via YAML') {
             steps {
-                echo '=== Applying Kubernetes Pod YAML ==='
+                echo '=== Stage 1: Applying Kubernetes Pod YAML ==='
                 withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
                     sh '''
                         kubectl apply -f sets/set-03-create-pod-yaml/pod.yaml
@@ -17,19 +18,26 @@ pipeline {
             }
         }
 
-        stage('Verify Pod Lifecycle') {
+        stage('Verify Pod Status') {
             steps {
-                echo '=== Waiting for Pod to reach Running state ==='
+                echo '=== Stage 2: Waiting for Pod to be Ready in Cluster ==='
                 withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
                     sh '''
-                        # Wait up to 60 seconds for Pod to be ready
-                        kubectl wait --for=condition=Ready pod/lab-demo-pod --timeout=60s
+                        kubectl wait --for=condition=Ready pod/${POD_NAME} --timeout=60s
+                        kubectl get pod ${POD_NAME} -o wide
+                    '''
+                }
+            }
+        }
 
-                        echo "--- Pod Details ---"
-                        kubectl get pod lab-demo-pod -o wide
-
-                        echo "--- Pod Description ---"
-                        kubectl describe pod lab-demo-pod
+        stage('Display Application Output') {
+            steps {
+                echo '=== Stage 3: Fetching Execution Output (Prime & Even Numbers) ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        echo "========================= POD LOGS START ========================="
+                        kubectl logs ${POD_NAME}
+                        echo "========================== POD LOGS END =========================="
                     '''
                 }
             }
@@ -38,7 +46,7 @@ pipeline {
 
     post {
         success {
-            echo "SUCCESS: Set 3 completed. Kubernetes Pod created and verified via YAML file."
+            echo "SUCCESS: Set 3 completed. Pod executed prime & even number calculation and verified in Kubernetes."
         }
     }
 }

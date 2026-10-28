@@ -1,0 +1,48 @@
+// Prime and Even Number Calculator for Agile & DevOps Lab Exercise
+
+function isPrime(num) {
+    if (num < 2) return false;
+    for (let i = 2; i <= Math.sqrt(num); i++) {
+        if (num % i === 0) return false;
+    }
+    return true;
+}
+
+console.log("==================================================================");
+console.log("       AGILE DEVELOPMENT PROCESS & DEVOPS LAB EXERCISE            ");
+console.log("       KUBERNETES POD EXECUTION: PRIME & EVEN NUMBERS             ");
+console.log("==================================================================");
+
+const evens = [];
+const odds = [];
+const primes = [];
+
+console.log("\n[1] NUMBER CLASSIFICATION (1 to 30):");
+console.log("------------------------------------------------------------------");
+for (let i = 1; i <= 30; i++) {
+    const isEven = (i % 2 === 0);
+    const primeStatus = isPrime(i);
+
+    if (isEven) evens.push(i);
+    else odds.push(i);
+
+    if (primeStatus) primes.push(i);
+
+    const typeStr = isEven ? "EVEN NUMBER" : "ODD NUMBER ";
+    const primeStr = primeStatus ? "★ PRIME NUMBER" : "  COMPOSITE";
+
+    console.log(`  Number ${String(i).padStart(2, ' ')}  ==>  [${typeStr}]  |  [${primeStr}]`);
+}
+
+console.log("------------------------------------------------------------------");
+console.log("\n[2] FINAL AGGREGATED SUMMARY:");
+console.log("------------------------------------------------------------------");
+console.log("Total Numbers Evaluated : 30");
+console.log("Even Numbers List       : " + JSON.stringify(evens));
+console.log("Odd Numbers List        : " + JSON.stringify(odds));
+console.log("Prime Numbers List      : " + JSON.stringify(primes));
+console.log("Total Primes Count      : " + primes.length);
+console.log("Total Evens Count       : " + evens.length);
+console.log("==================================================================");
+console.log(">> SUCCESS: Computation finished successfully inside Kubernetes Pod! <<");
+console.log("==================================================================");
