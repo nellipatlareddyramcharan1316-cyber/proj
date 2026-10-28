@@ -1,0 +1,62 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+        DEPLOYMENT_NAME   = 'image-update-app'
+        CONTAINER_NAME    = 'app-container'
+        NEW_IMAGE         = 'nginx:1.25-alpine'
+    }
+
+    stages {
+        stage('Deploy Initial Version') {
+            steps {
+                echo '=== Deploying initial version (nginx:1.24-alpine) ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-07-update-image/deployment.yaml
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=60s
+                        echo "--- Current Image in Pods ---"
+                        kubectl get deployment ${DEPLOYMENT_NAME} -o jsonpath="{.spec.template.spec.containers[0].image}"
+                        echo ""
+                    '''
+                }
+            }
+        }
+
+        stage('Update Docker Image') {
+            steps {
+                echo "=== Updating container image to ${NEW_IMAGE} ==="
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl set image deployment/${DEPLOYMENT_NAME} ${CONTAINER_NAME}=${NEW_IMAGE}
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Rollout & Updated Image') {
+            steps {
+                echo '=== Verifying image update and rollout status ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=90s
+
+                        echo "--- Updated Image in Deployment Spec ---"
+                        UPDATED_IMG=$(kubectl get deployment ${DEPLOYMENT_NAME} -o jsonpath="{.spec.template.spec.containers[0].image}")
+                        echo "New Active Image: $UPDATED_IMG"
+
+                        echo "--- Updated Pods ---"
+                        kubectl get pods -l app=image-update-app -o wide
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 7 completed. Kubernetes Deployment updated with new Docker image."
+        }
+    }
+}

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pvc-demo-pod
+  namespace: default
+  labels:
+    app: pvc-demo
+spec:
+  containers:
+    - name: app-storage
+      image: nginx:alpine
+      ports:
+        - containerPort: 80
+      volumeMounts:
+        - name: storage-volume
+          mountPath: /usr/share/nginx/html
+  volumes:
+    - name: storage-volume
+      persistentVolumeClaim:
+        claimName: lab-pvc

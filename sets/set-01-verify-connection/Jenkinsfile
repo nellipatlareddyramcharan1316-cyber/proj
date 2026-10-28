@@ -1,0 +1,38 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+    }
+
+    stages {
+        stage('Verify Kubernetes Connection') {
+            steps {
+                echo '=== Connecting to Kubernetes Cluster via Jenkins ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        echo "[1] Testing Cluster Information:"
+                        kubectl cluster-info
+
+                        echo "[2] Listing Active Cluster Nodes:"
+                        kubectl get nodes -o wide
+
+                        echo "[3] Checking Namespaces:"
+                        kubectl get namespaces
+
+                        echo "[4] Verification Succeeded: Jenkins is successfully communicating with Kubernetes!"
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 1 verified - Kubernetes cluster is connected and accessible."
+        }
+        failure {
+            echo "FAILURE: Could not connect to Kubernetes cluster. Check your KUBECONFIG credential."
+        }
+    }
+}

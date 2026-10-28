@@ -1,0 +1,54 @@
+pipeline {
+    agent any
+
+    // Trigger pipeline automatically when changes are pushed to GitHub
+    triggers {
+        githubPush()
+    }
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+        DEPLOYMENT_NAME   = 'github-deploy-app'
+    }
+
+    stages {
+        stage('Checkout Code from GitHub') {
+            steps {
+                echo '=== Stage 1: Triggered via GitHub Webhook ==='
+                script {
+                    echo "Commit Hash   : ${env.GIT_COMMIT ?: 'Local/Manual Trigger'}"
+                    echo "Branch Name   : ${env.GIT_BRANCH ?: 'main'}"
+                }
+            }
+        }
+
+        stage('Deploy Code Changes to Kubernetes') {
+            steps {
+                echo '=== Stage 2: Automatically Deploying Changes to Cluster ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-11-github-integration/deployment.yaml
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=90s
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                echo '=== Stage 3: Verifying Active Pods after GitHub Trigger ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl get pods -l app=github-deploy -o wide
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 11 completed. Automated GitHub webhook trigger deployed code to Kubernetes."
+        }
+    }
+}

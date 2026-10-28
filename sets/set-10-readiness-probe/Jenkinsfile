@@ -1,0 +1,46 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+        DEPLOYMENT_NAME   = 'readiness-demo-app'
+    }
+
+    stages {
+        stage('Deploy Application with Readiness Probe') {
+            steps {
+                echo '=== Deploying Kubernetes Application with Configured Readiness Probe ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-10-readiness-probe/deployment.yaml
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Readiness Probe Status') {
+            steps {
+                echo '=== Monitoring Pods until Readiness Probe passes ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        # Wait for deployment rollout to verify readiness
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=90s
+
+                        echo "--- Pod Details and Readiness Conditions ---"
+                        kubectl get pods -l app=readiness-demo -o jsonpath='{range .items[*]}{.metadata.name}{"\tReady: "}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
+
+                        echo "--- Readiness Probe Configuration ---"
+                        kubectl get deployment ${DEPLOYMENT_NAME} -o jsonpath='{.spec.template.spec.containers[0].readinessProbe}'
+                        echo ""
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 10 completed. Readiness probe verified and all pods marked Ready."
+        }
+    }
+}

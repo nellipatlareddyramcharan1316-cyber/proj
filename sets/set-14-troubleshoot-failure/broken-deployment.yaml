@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: troubleshoot-demo-app
+  namespace: default
+  labels:
+    app: troubleshoot-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: troubleshoot-demo
+  template:
+    metadata:
+      labels:
+        app: troubleshoot-demo
+    spec:
+      containers:
+        - name: web
+          # Intentionally invalid image name to trigger ImagePullBackOff / CrashLoopBackOff
+          image: nonexistent-registry.local/fake-image:v99.99.99
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80

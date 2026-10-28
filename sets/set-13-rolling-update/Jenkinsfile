@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+        DEPLOYMENT_NAME   = 'rolling-update-app'
+        NEW_IMAGE         = 'nginx:1.25-alpine'
+    }
+
+    stages {
+        stage('Deploy Initial Version') {
+            steps {
+                echo '=== Stage 1: Deploying initial deployment (4 replicas) ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-13-rolling-update/deployment.yaml
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=90s
+                    '''
+                }
+            }
+        }
+
+        stage('Perform Rolling Update') {
+            steps {
+                echo "=== Stage 2: Performing Rolling Update to ${NEW_IMAGE} ==="
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        # Update container image to trigger zero-downtime rolling update
+                        kubectl set image deployment/${DEPLOYMENT_NAME} web=${NEW_IMAGE}
+                    '''
+                }
+            }
+        }
+
+        stage('Monitor Rollout Status') {
+            steps {
+                echo '=== Stage 3: Verifying Rollout Status in Real-Time ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=120s
+
+                        echo "--- Rollout Revision History ---"
+                        kubectl rollout history deployment/${DEPLOYMENT_NAME}
+
+                        echo "--- Healthy Replicas Running New Image ---"
+                        kubectl get pods -l app=rolling-update -o wide
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 13 completed. Rolling update verified with zero downtime."
+        }
+    }
+}

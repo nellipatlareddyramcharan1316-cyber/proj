@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scalable-app
+  namespace: default
+  labels:
+    app: scalable-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scalable-app
+  template:
+    metadata:
+      labels:
+        app: scalable-app
+    spec:
+      containers:
+      - name: scalable-nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80

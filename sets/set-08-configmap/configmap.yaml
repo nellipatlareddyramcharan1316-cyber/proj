@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: default
+data:
+  APP_ENV: "production"
+  APP_DEBUG: "false"
+  WELCOME_MESSAGE: "ConfigMap successfully injected by Jenkins Pipeline!"
+  custom.html: |
+    <!DOCTYPE html>
+    <html>
+    <head><title>ConfigMap Demo</title></head>
+    <body style="font-family: Arial; text-align: center; padding: 50px; background-color: #f4f6f9;">
+      <h1 style="color: #2b5797;">Kubernetes ConfigMap Mounted Successfully</h1>
+      <p>Loaded dynamically from <code>app-config</code> via Jenkins Pipeline.</p>
+    </body>
+    </html>

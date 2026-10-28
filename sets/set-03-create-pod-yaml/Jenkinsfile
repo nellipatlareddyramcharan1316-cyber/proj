@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+    }
+
+    stages {
+        stage('Create Pod via YAML') {
+            steps {
+                echo '=== Applying Kubernetes Pod YAML ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-03-create-pod-yaml/pod.yaml
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Pod Lifecycle') {
+            steps {
+                echo '=== Waiting for Pod to reach Running state ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        # Wait up to 60 seconds for Pod to be ready
+                        kubectl wait --for=condition=Ready pod/lab-demo-pod --timeout=60s
+
+                        echo "--- Pod Details ---"
+                        kubectl get pod lab-demo-pod -o wide
+
+                        echo "--- Pod Description ---"
+                        kubectl describe pod lab-demo-pod
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 3 completed. Kubernetes Pod created and verified via YAML file."
+        }
+    }
+}

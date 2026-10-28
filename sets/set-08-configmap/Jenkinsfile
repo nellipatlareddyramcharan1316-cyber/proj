@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+    }
+
+    stages {
+        stage('Deploy ConfigMap') {
+            steps {
+                echo '=== Applying Kubernetes ConfigMap ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-08-configmap/configmap.yaml
+                        echo "--- ConfigMap Details ---"
+                        kubectl get configmap app-config -o yaml
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Application using ConfigMap') {
+            steps {
+                echo '=== Deploying Application with ConfigMap Injection ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-08-configmap/deployment-configmap.yaml
+                        kubectl rollout status deployment/configmap-demo-app --timeout=60s
+                    '''
+                }
+            }
+        }
+
+        stage('Verify ConfigMap in Pod') {
+            steps {
+                echo '=== Verifying environment variables & mounted file inside Pod ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        POD_NAME=$(kubectl get pods -l app=configmap-demo -o jsonpath="{.items[0].metadata.name}")
+                        echo "Pod Name: $POD_NAME"
+
+                        echo "--- Injected Environment Variables ---"
+                        kubectl exec $POD_NAME -- env | grep -E "APP_ENV|WELCOME_MESSAGE"
+
+                        echo "--- Mounted ConfigMap File Content ---"
+                        kubectl exec $POD_NAME -- cat /usr/share/nginx/html/index.html
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 8 completed. Application deployed and verified with Kubernetes ConfigMap."
+        }
+    }
+}

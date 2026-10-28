@@ -1,0 +1,56 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+        DEPLOYMENT_NAME   = 'scalable-app'
+        TARGET_REPLICAS   = '3'
+    }
+
+    stages {
+        stage('Deploy Initial Deployment') {
+            steps {
+                echo '=== Deploying initial deployment (1 replica) ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-06-scale-deployment/deployment.yaml
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=60s
+                        echo "Initial Replica Count:"
+                        kubectl get deployment ${DEPLOYMENT_NAME}
+                    '''
+                }
+            }
+        }
+
+        stage('Scale to 3 Replicas') {
+            steps {
+                echo "=== Scaling deployment ${DEPLOYMENT_NAME} to ${TARGET_REPLICAS} replicas ==="
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl scale deployment ${DEPLOYMENT_NAME} --replicas=${TARGET_REPLICAS}
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Scaled Replicas') {
+            steps {
+                echo '=== Verifying new replica count in cluster ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=60s
+                        kubectl get deployment ${DEPLOYMENT_NAME} -o wide
+                        echo "--- List of 3 Running Pods ---"
+                        kubectl get pods -l app=scalable-app
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 6 completed. Deployment successfully scaled to 3 replicas."
+        }
+    }
+}

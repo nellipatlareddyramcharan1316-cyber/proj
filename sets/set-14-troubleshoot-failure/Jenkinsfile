@@ -1,0 +1,73 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+        DEPLOYMENT_NAME   = 'troubleshoot-demo-app'
+    }
+
+    stages {
+        stage('Deploy and Detect Failure') {
+            steps {
+                echo '=== Stage 1: Deploying Application Manifest and Monitoring Health ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        # Apply broken deployment to simulate deployment failure
+                        kubectl apply -f sets/set-14-troubleshoot-failure/broken-deployment.yaml
+
+                        echo "--- Monitoring rollout (30s timeout) ---"
+                        if ! kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=30s; then
+                            echo "⚠️ ALERT: Deployment failed rollout check! Entering Diagnostic Mode..."
+                        else
+                            echo "Deployment succeeded unexpectedly."
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Automated Diagnosis & Troubleshooting') {
+            steps {
+                echo '=== Stage 2: Automated Failure Diagnostics ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        echo "================ [1] Pod States ================"
+                        kubectl get pods -l app=troubleshoot-demo -o wide
+
+                        echo "================ [2] Pod Termination / Failure Reasons ================"
+                        kubectl get pods -l app=troubleshoot-demo -o jsonpath='{range .items[*]}{.metadata.name}{"\tState: "}{.status.containerStatuses[0].state}{"\n"}{end}'
+
+                        echo "================ [3] Cluster Events (Warning/Error) ================"
+                        kubectl get events --field-selector type=Warning --sort-by='.lastTimestamp' | tail -n 10
+
+                        echo "================ [4] Detailed Pod Description ================"
+                        FAILED_POD=$(kubectl get pods -l app=troubleshoot-demo -o jsonpath="{.items[0].metadata.name}")
+                        kubectl describe pod $FAILED_POD
+                    '''
+                }
+            }
+        }
+
+        stage('Auto-Remediation & Recovery') {
+            steps {
+                echo '=== Stage 3: Applying Self-Healing / Fixed Deployment ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        echo "Applying remediation fix..."
+                        kubectl apply -f sets/set-14-troubleshoot-failure/fixed-deployment.yaml
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=60s
+
+                        echo "--- Successfully Recovered Pods ---"
+                        kubectl get pods -l app=troubleshoot-demo
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 14 completed. Failure successfully detected, diagnosed, and remediated."
+        }
+    }
+}

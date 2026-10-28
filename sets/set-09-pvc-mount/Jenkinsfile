@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+        POD_NAME          = 'pvc-demo-pod'
+        PVC_NAME          = 'lab-pvc'
+    }
+
+    stages {
+        stage('Create PersistentVolumeClaim') {
+            steps {
+                echo '=== Applying Kubernetes PersistentVolumeClaim ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-09-pvc-mount/pvc.yaml
+                        echo "--- PVC Status ---"
+                        kubectl get pvc ${PVC_NAME}
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Pod with PVC Mounted') {
+            steps {
+                echo '=== Deploying Pod mounting the PVC ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-09-pvc-mount/pod-pvc.yaml
+                        echo "--- Waiting for Pod to be Ready ---"
+                        kubectl wait --for=condition=Ready pod/${POD_NAME} --timeout=90s
+                        kubectl get pod ${POD_NAME} -o wide
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Persistent Volume Mount') {
+            steps {
+                echo '=== Writing data to mounted persistent volume and checking disk usage ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        echo "--- Mounted Filesystems inside Pod ---"
+                        kubectl exec ${POD_NAME} -- df -h /usr/share/nginx/html
+
+                        echo "--- Writing test content to PVC mount ---"
+                        kubectl exec ${POD_NAME} -- sh -c 'echo "Data stored in PVC: $(date)" > /usr/share/nginx/html/storage-test.txt'
+
+                        echo "--- Verifying content read from PVC ---"
+                        kubectl exec ${POD_NAME} -- cat /usr/share/nginx/html/storage-test.txt
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 9 completed. PersistentVolumeClaim created and successfully mounted in Pod."
+        }
+        failure {
+            echo "FAILURE: Set 9 failed. Ensure default StorageClass is present in your Kubernetes cluster."
+        }
+    }
+}

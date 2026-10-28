@@ -1,0 +1,40 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+        APP_NAME = 'web-app-deployment'
+    }
+
+    stages {
+        stage('Deploy Web App') {
+            steps {
+                echo '=== Deploying Web Application using Kubernetes Deployment ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-04-deploy-web-deployment/deployment.yaml
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Rollout') {
+            steps {
+                echo '=== Tracking Deployment Rollout ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl rollout status deployment/${APP_NAME} --timeout=90s
+                        kubectl get deployment ${APP_NAME} -o wide
+                        kubectl get pods -l app=web-app -o wide
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 4 completed. Web application deployed via Kubernetes Deployment."
+        }
+    }
+}

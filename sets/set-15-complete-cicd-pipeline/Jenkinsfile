@@ -1,0 +1,154 @@
+pipeline {
+    agent any
+
+    parameters {
+        booleanParam(name: 'PUSH_TO_REGISTRY', defaultValue: false, description: 'Push built image to Docker Registry (Docker Hub)')
+        stringParam(name: 'DOCKER_USER', defaultValue: 'devopsuser', description: 'Docker Hub Username / Registry Namespace')
+        stringParam(name: 'NAMESPACE', defaultValue: 'default', description: 'Kubernetes target namespace')
+    }
+
+    environment {
+        APP_NAME               = 'devops-sample-webapp'
+        DEPLOYMENT_NAME        = 'devops-sample-app'
+        SERVICE_NAME           = 'devops-sample-service'
+        CONTAINER_NAME         = 'web-app'
+        K8S_CREDENTIAL_ID      = 'k8s-kubeconfig'
+        DOCKER_CREDENTIAL_ID   = 'docker-hub-credentials'
+        IMAGE_TAG              = "${BUILD_NUMBER}"
+        LOCAL_IMAGE            = "${params.DOCKER_USER}/${APP_NAME}:${BUILD_NUMBER}"
+        LATEST_IMAGE           = "${params.DOCKER_USER}/${APP_NAME}:latest"
+    }
+
+    stages {
+        stage('Checkout & Verify Workspace') {
+            steps {
+                echo '=== Stage 1: Checkout Source Code & Validate Manifests ==='
+                script {
+                    echo "Build Number : ${env.BUILD_NUMBER}"
+                    echo "Workspace    : ${env.WORKSPACE}"
+                    echo "Target K8s NS: ${params.NAMESPACE}"
+                }
+            }
+        }
+
+        stage('Automated Unit Tests') {
+            steps {
+                echo '=== Stage 2: Running Automated Unit & Healthcheck Tests ==='
+                sh '''
+                    echo "[CI] Executing application test suite..."
+                    node sets/set-15-complete-cicd-pipeline/app/test.js
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo "=== Stage 3: Building Container Image [Tag: ${IMAGE_TAG}] ==="
+                sh """
+                    docker build -t ${LOCAL_IMAGE} -t ${LATEST_IMAGE} -f sets/set-15-complete-cicd-pipeline/Dockerfile sets/set-15-complete-cicd-pipeline
+                    echo "[Docker] Image built successfully:"
+                    docker images | grep ${APP_NAME} | head -n 2
+                """
+            }
+        }
+
+        stage('Push Image to Registry') {
+            when {
+                expression { return params.PUSH_TO_REGISTRY }
+            }
+            steps {
+                echo '=== Stage 4: Authenticating and Pushing Image to Docker Registry ==='
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIAL_ID}", usernameVariable: 'DOCKER_HUB_USER', passwordVariable: 'DOCKER_HUB_PASSWORD')]) {
+                    sh """
+                        echo "\$DOCKER_HUB_PASSWORD" | docker login -u "\$DOCKER_HUB_USER" --password-stdin
+                        docker push ${LOCAL_IMAGE}
+                        docker push ${LATEST_IMAGE}
+                        docker logout
+                    """
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                echo '=== Stage 5: Deploying Application Manifests to Kubernetes ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh """
+                        # Apply Deployment and Service manifests
+                        kubectl apply -f sets/set-15-complete-cicd-pipeline/k8s/deployment.yaml -n ${params.NAMESPACE}
+                        kubectl apply -f sets/set-15-complete-cicd-pipeline/k8s/service.yaml -n ${params.NAMESPACE}
+
+                        # Dynamically update the container image to the build version
+                        kubectl set image deployment/${DEPLOYMENT_NAME} ${CONTAINER_NAME}=${LOCAL_IMAGE} -n ${params.NAMESPACE}
+                    """
+                }
+            }
+        }
+
+        stage('Verify Rollout Status') {
+            steps {
+                echo '=== Stage 6: Verifying Zero-Downtime Rolling Update ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh """
+                        # Monitor rollout progress until all replicas are healthy
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${params.NAMESPACE} --timeout=120s
+
+                        echo "--- Deployed Pods ---"
+                        kubectl get pods -l app=${DEPLOYMENT_NAME} -n ${params.NAMESPACE} -o wide
+                    """
+                }
+            }
+        }
+
+        stage('Smoke & Integration Test') {
+            steps {
+                echo '=== Stage 7: Cluster Verification & Service Connectivity ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh """
+                        echo "--- Active Kubernetes Service ---"
+                        kubectl get svc ${SERVICE_NAME} -n ${params.NAMESPACE}
+
+                        POD_NAME=\$(kubectl get pods -l app=${DEPLOYMENT_NAME} -n ${params.NAMESPACE} -o jsonpath="{.items[0].metadata.name}")
+                        echo "Testing endpoint from within pod: \$POD_NAME"
+
+                        kubectl exec \$POD_NAME -n ${params.NAMESPACE} -- wget -qO- http://localhost:3000/health
+                        echo ""
+                        echo ">>> SMOKE TEST PASSED: Web application is responding with HTTP 200 OK! <<<"
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline finished execution for build #${BUILD_NUMBER}."
+        }
+        success {
+            echo """
+            ========================================================================
+            🎉 SUCCESS: Set 15 CI/CD Pipeline Completed Successfully!
+            - GitHub Commit / Trigger verified
+            - Automated Unit Tests passed
+            - Docker Image built: ${LOCAL_IMAGE}
+            - Kubernetes Deployment rolled out with 3 replicas
+            - Service exposed via NodePort: 30080
+            ========================================================================
+            """
+        }
+        failure {
+            echo """
+            ========================================================================
+            ❌ FAILURE: Pipeline failed during build #${BUILD_NUMBER}.
+            Troubleshooting Kubernetes events:
+            ========================================================================
+            """
+            withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                sh """
+                    kubectl get events -n ${params.NAMESPACE} --sort-by='.lastTimestamp' | tail -n 15 || true
+                    kubectl describe deployment ${DEPLOYMENT_NAME} -n ${params.NAMESPACE} || true
+                """
+            }
+        }
+    }
+}

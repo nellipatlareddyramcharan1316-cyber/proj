@@ -1,0 +1,49 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+    }
+
+    stages {
+        stage('Deploy App & Service') {
+            steps {
+                echo '=== Deploying Deployment and Service ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-05-expose-service/deployment.yaml
+                        kubectl apply -f sets/set-05-expose-service/service.yaml
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Service and Endpoints') {
+            steps {
+                echo '=== Verifying Exposed Service ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl rollout status deployment/exposed-web-deployment --timeout=60s
+                        echo "--- Kubernetes Services ---"
+                        kubectl get svc exposed-web-service -o wide
+
+                        echo "--- Service Endpoints (Target Pod IPs) ---"
+                        kubectl get endpoints exposed-web-service
+
+                        echo "--- Access Details ---"
+                        NODE_PORT=$(kubectl get svc exposed-web-service -o jsonpath='{.spec.ports[0].nodePort}')
+                        CLUSTER_IP=$(kubectl get svc exposed-web-service -o jsonpath='{.spec.clusterIP}')
+                        echo "ClusterIP: $CLUSTER_IP:80"
+                        echo "NodePort:  $NODE_PORT"
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 5 completed. Application successfully exposed using Kubernetes Service."
+        }
+    }
+}

@@ -1,0 +1,39 @@
+pipeline {
+    agent any
+
+    environment {
+        K8S_CREDENTIAL_ID = 'k8s-kubeconfig'
+        NAMESPACE = 'default'
+    }
+
+    stages {
+        stage('Deploy Sample Application') {
+            steps {
+                echo '=== Deploying sample application to Kubernetes ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl apply -f sets/set-02-deploy-sample-app/sample-app.yaml -n ${NAMESPACE}
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Deployment Status') {
+            steps {
+                echo '=== Verifying application pods and status ==='
+                withCredentials([file(credentialsId: "${K8S_CREDENTIAL_ID}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                        kubectl rollout status deployment/sample-app -n ${NAMESPACE} --timeout=60s
+                        kubectl get pods -l app=sample-app -n ${NAMESPACE} -o wide
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS: Set 2 completed. Sample app successfully deployed to Kubernetes!"
+        }
+    }
+}

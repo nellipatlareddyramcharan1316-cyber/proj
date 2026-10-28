@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docker-k8s-app
+  namespace: default
+  labels:
+    app: docker-k8s
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: docker-k8s
+  template:
+    metadata:
+      labels:
+        app: docker-k8s
+    spec:
+      containers:
+        - name: app-container
+          image: docker-k8s-demo:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80

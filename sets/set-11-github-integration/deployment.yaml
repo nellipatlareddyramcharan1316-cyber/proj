@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-deploy-app
+  namespace: default
+  labels:
+    app: github-deploy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: github-deploy
+  template:
+    metadata:
+      labels:
+        app: github-deploy
+    spec:
+      containers:
+        - name: web
+          image: nginx:alpine
+          ports:
+            - containerPort: 80

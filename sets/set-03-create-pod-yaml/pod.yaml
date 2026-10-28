@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lab-demo-pod
+  namespace: default
+  labels:
+    tier: lab
+    exercise: set-03
+spec:
+  containers:
+  - name: web-test
+    image: nginx:alpine
+    ports:
+    - containerPort: 80
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"

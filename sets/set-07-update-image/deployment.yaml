@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-update-app
+  namespace: default
+  labels:
+    app: image-update-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: image-update-app
+  template:
+    metadata:
+      labels:
+        app: image-update-app
+    spec:
+      containers:
+      - name: app-container
+        image: nginx:1.24-alpine
+        ports:
+        - containerPort: 80
